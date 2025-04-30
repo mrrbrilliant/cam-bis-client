@@ -1,0 +1,28 @@
+services:
+  backend:
+    image: lypich/bisinvoice
+    container_name: bisinvoice-backend
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "4000:8080" # Map host 4000 to container 8080
+    networks:
+      - bis-network
+
+  frontend:
+    build: . # Build the image from the Dockerfile in the current directory
+    container_name: bisinvoice-client
+    restart: unless-stopped
+    ports:
+      - "3000:3000" # Map host 3000 to container 3000
+    environment:
+      - BACKEND_URL=http://backend:8080 # Use the service name 'backend' and its internal port 8080
+    depends_on:
+      - backend # Wait for the backend to start (basic check)
+    networks:
+      - bis-network
+
+networks:
+  bis-network:
+    driver: bridge
