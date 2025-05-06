@@ -28,7 +28,7 @@ export default function InvoicesPage() {
 	});
 
 	const handleRowClick = (invoice: Invoice) => {
-		router.push(`/dashboard/invoices/${invoice.id}`);
+		router.push(`/dashboard/sales/invoices/${invoice.id}`);
 	};
 
 	const renderLoading = () => (

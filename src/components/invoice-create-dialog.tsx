@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -25,8 +25,21 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner"; // Assuming you use sonner for toasts
-import { BisInvoiceApiService, Invoice, InvoiceLine } from "@/lib/api"; // Adjust path if needed
+import {
+	BisInvoiceApiService,
+	Invoice,
+	InvoiceLine,
+	Customer,
+	Item,
+} from "@/lib/api"; // Adjust path if needed
 import { PlusCircle, Wand2 } from "lucide-react"; // Icons for the trigger button and random fill button
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select"; // Import Select
 
 // Define the form schema using Zod based on the Invoice model and sample data
 // Added UUID validation and itemDescription field
@@ -57,10 +70,27 @@ type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
 // Define the query key for invoices (same as in the page)
 const invoicesQueryKey = ["invoices", "list"];
+const customersQueryKey = ["customers", "list"];
+const itemsQueryKey = ["items", "list"];
 
 export function InvoiceCreateDialog() {
 	const [open, setOpen] = useState(false);
 	const queryClient = useQueryClient();
+
+	// Fetch customers
+	const { data: customers, isLoading: isLoadingCustomers } = useQuery<
+		Customer[],
+		Error
+	>({
+		queryKey: customersQueryKey,
+		queryFn: () => BisInvoiceApiService.customer(),
+	});
+
+	// Fetch items
+	const { data: items, isLoading: isLoadingItems } = useQuery<Item[], Error>({
+		queryKey: itemsQueryKey,
+		queryFn: () => BisInvoiceApiService.item(),
+	});
 
 	const form = useForm<InvoiceFormValues>({
 		resolver: zodResolver(invoiceFormSchema),
@@ -116,11 +146,28 @@ export function InvoiceCreateDialog() {
 
 	// Function to generate random data and fill the form
 	const fillRandomData = () => {
-		const randomCustomerId = crypto.randomUUID();
-		const randomItemId = crypto.randomUUID();
+		// Find a random customer from the fetched list
+		const randomCustomer =
+			customers && customers.length > 0
+				? customers[Math.floor(Math.random() * customers.length)]
+				: null;
+		const randomCustomerId = randomCustomer?.id ?? crypto.randomUUID();
+
+		// Find a random item from the fetched list
+		const randomItem =
+			items && items.length > 0
+				? items[Math.floor(Math.random() * items.length)]
+				: null;
+		const randomItemId = randomItem?.id ?? crypto.randomUUID();
+
 		const randomQuantity = Math.floor(Math.random() * 10) + 1; // Random quantity between 1 and 10
-		const randomPrice = parseFloat((Math.random() * 90 + 10).toFixed(2)); // Random price between 10.00 and 100.00
-		const randomDescription = `Random Item ${Math.floor(Math.random() * 1000)}`;
+		const randomPrice =
+			randomItem && typeof randomItem.salesPrice === "number"
+				? randomItem.salesPrice
+				: parseFloat((Math.random() * 90 + 10).toFixed(2)); // Random price between 10.00 and 100.00
+		const randomDescription =
+			randomItem?.itemDescription ??
+			`Random Item ${Math.floor(Math.random() * 1000)}`;
 
 		form.setValue("customerId", randomCustomerId);
 		// Reset lines and add one random line
@@ -178,10 +225,26 @@ export function InvoiceCreateDialog() {
 							name="customerId"
 							render={({ field }) => (
 								<FormItem>
-									<FormLabel>Customer ID</FormLabel>
-									<FormControl>
-										<Input placeholder="Enter customer ID" {...field} />
-									</FormControl>
+									<FormLabel>Customer</FormLabel>
+									<Select
+										onValueChange={field.onChange}
+										defaultValue={field.value}
+										disabled={isLoadingCustomers}
+									>
+										<FormControl>
+											<SelectTrigger>
+												<SelectValue placeholder="Select a customer" />
+											</SelectTrigger>
+										</FormControl>
+										<SelectContent>
+											{customers?.map((customer) => (
+												<SelectItem key={customer.id} value={customer.id!}>
+													{customer.name}{" "}
+													{/* Assuming customer has a 'name' property */}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
 									<FormMessage />
 								</FormItem>
 							)}
@@ -200,12 +263,42 @@ export function InvoiceCreateDialog() {
 									name={`invoiceLines.${index}.itemId`}
 									render={({ field }) => (
 										<FormItem className="col-span-2">
-											{" "}
-											{/* Adjusted span */}
-											<FormLabel>Item ID</FormLabel>
-											<FormControl>
-												<Input placeholder="Item ID (UUID)" {...field} />
-											</FormControl>
+											<FormLabel>Item</FormLabel>
+											<Select
+												onValueChange={(value) => {
+													field.onChange(value);
+													// Optionally, auto-fill price and description when item changes
+													const selectedItem = items?.find(
+														(item) => item.id === value
+													);
+													if (selectedItem) {
+														form.setValue(
+															`invoiceLines.${index}.salesPrice`,
+															selectedItem.salesPrice ?? 0
+														);
+														form.setValue(
+															`invoiceLines.${index}.itemDescription`,
+															selectedItem.itemDescription ?? ""
+														);
+													}
+												}}
+												defaultValue={field.value}
+												disabled={isLoadingItems}
+											>
+												<FormControl>
+													<SelectTrigger>
+														<SelectValue placeholder="Select an item" />
+													</SelectTrigger>
+												</FormControl>
+												<SelectContent>
+													{items?.map((item) => (
+														<SelectItem key={item.id} value={item.id!}>
+															{item.itemName}{" "}
+															{/* Assuming item has a 'itemName' property */}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
 											<FormMessage />
 										</FormItem>
 									)}
